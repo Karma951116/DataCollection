@@ -1,7 +1,8 @@
 import pymysql
-from Utils.ReadConfig import ReadConfig
+from Utils.read_config import ReadConfig
 
-class OperationMysql:
+
+class MysqlOperator:
 
     def __init__(self):
         self.data = ReadConfig()
@@ -18,6 +19,8 @@ class OperationMysql:
             self.cur = self.conn.cursor()
         except:
             print("数据库连接失败")
+            return 1
+        return 0
 
     # 查询
     def search(self, sql):
@@ -27,7 +30,8 @@ class OperationMysql:
             # result = self.cur.fetchone()  # 使用 fetchone()方法获取单条数据.只显示一行结果
             result = self.cur.fetchall()  # 显示所有结果
         except:
-            print("执行查询语句失败 %s") %sql
+            #print("执行查询语句失败 %s" % sql)
+            return 1
 
         return result
 
@@ -39,7 +43,9 @@ class OperationMysql:
         except:
             # 发生错误时回滚
             self.conn.rollback()
-            print("执行语句失败 %s") % sql
+            #print("执行语句失败 %s" % sql)
+            return 1
+        return 0
 
     def close_mysql(self):
         self.cur.close()
