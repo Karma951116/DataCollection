@@ -1,11 +1,11 @@
 import pymysql
-from Utils.read_config import ReadConfig
+from Utils.config_operator import ConfigOperator
 
 
 class MysqlOperator:
 
     def __init__(self):
-        self.data = ReadConfig()
+        self.data = ConfigOperator()
 
     def conn_mysql(self):
         # 创建一个连接数据库的对象
