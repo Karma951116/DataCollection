@@ -29,7 +29,7 @@ class FilmBaseInfoCrawler:
             'Accept-Encoding': 'gzip, deflate, br',
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
             'Connection': 'keep-alive',
-            'Cookie': '__mta=217831081.1608186388084.1611555167551.1611555192384.85;'
+            'Cookie': '__mta=217831081.1608186388084.1611725576857.1611790471095.103;'
                       ' _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8;'
                       ' uuid_n_v=v1; recentCis=1%3D151%3D140%3D84%3D197;'
                       ' theme=moviepro; uuid=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993;'
@@ -39,9 +39,9 @@ class FilmBaseInfoCrawler:
                       ' _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993;'
                       ' Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555;'
                       ' _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic;'
-                      ' __mta=217831081.1608186388084.1611551400561.1611551638864.78;'
-                      ' Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1611555192;'
-                      ' _lxsdk_s=17738867c60-e6d-6b8-806%7C1097461883%7C1',
+                      ' __mta=217831081.1608186388084.1611725576857.1611790469325.103;'
+                      ' Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1611790471;'
+                      ' _lxsdk_s=17746329ff9-519-5ce-354%7C1097461883%7C8',
             'User-Agent': ua.random
         }
         cur_url = self.base_url + film_id.__str__() + '#award'
@@ -183,12 +183,14 @@ class FilmBaseInfoCrawler:
                 for li in li_list:
                     celebrity_id = re.search(r'\d+', li.get('data-val')).group(0).strip()
                     celebrity_name = li.find(class_='name').string.strip()
+                    celebrity_name = celebrity_name.replace('\"', '').strip()
                     role = ''
                     role_object = li.find(class_='role')
 
                     if role_object is not None:
                         role = role_object.string
                         role = role.replace('饰：', '').strip()
+                        role = role.replace('\"', '').strip()
                     staff_info = []
                     staff_info.append(celebrity_type_zh)
                     staff_info.append(celebrity_name)
@@ -298,7 +300,8 @@ def official_method():
     crawler = FilmBaseInfoCrawler()
     film_id_list = crawler.read_film_id()
     cfo = config_operator.ConfigOperator()
-    offset = int(cfo.get_film_baseinfo('current_offset'))
+    offset = int(cfo.get_maoyan_film('baseinfo_offset'))
+    interval = int(cfo.get_maoyan_film('baseinfo_interval'))
     for num in range(offset, film_id_list.__len__()):
         film_id = int(film_id_list[num][0])
         html_doc = crawler.get_response(film_id)
@@ -306,8 +309,8 @@ def official_method():
         dict_cast_staff = crawler.get_staff_info(html_doc)
         dict_awards = crawler.get_award_info(html_doc)
         crawler.write_db(dict_base_info, dict_cast_staff, dict_awards, film_id)
-        cfo.write_film_baseinfo('current_offset', num.__str__())
-        time.sleep(25)
+        cfo.write_maoyan_film('baseinfo_offset', num.__str__())
+        time.sleep(interval)
 
 
 if __name__ == '__main__':

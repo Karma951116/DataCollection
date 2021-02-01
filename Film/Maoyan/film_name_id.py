@@ -13,7 +13,7 @@ from Utils import mysql_operator
 class FilmIdCrawler:
 
     def __init__(self):
-        self.base_url = 'https://maoyan.com/films?showType=3&sortId=2&offset='
+        self.base_url = 'https://maoyan.com/films?showType=3&sortId=1&offset='
         self.min_offset = 0
         self.max_offset = 1980
 

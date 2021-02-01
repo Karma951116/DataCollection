@@ -17,19 +17,18 @@ class ConfigOperator:
         value = self.cf.get("Mysql-Database", param)
         return value
 
-    def get_film_baseinfo(self, param):
-        value = self.cf.get("Film-BaseInfo", param)
+    def get_maoyan_film(self, param):
+        value = self.cf.get("Maoyan-Film", param)
         return value
 
-    def write_film_baseinfo(self, param, content):
-        self.cf.set("Film-BaseInfo", param, content)
+    def write_maoyan_film(self, param, content):
+        self.cf.set("Maoyan-Film", param, content)
         self.cf.write(open(self.config_path, "w"))
 
-    def get_film_boxoffice(self, param):
-        value = self.cf.get("Film-BoxOffice", param)
+    def get_douban_film(self, param):
+        value = self.cf.get("Douban-Film", param)
         return value
 
-    def write_film_boxoffice(self, param, content):
-        self.cf.set("Film-BoxOffice", param, content)
+    def write_douban_film(self, param, content):
+        self.cf.set("Douban-Film", param, content)
         self.cf.write(open(self.config_path, "w"))
-

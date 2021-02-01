@@ -29,8 +29,8 @@ class MysqlOperator:
             self.cur.execute(sql)
             # result = self.cur.fetchone()  # 使用 fetchone()方法获取单条数据.只显示一行结果
             result = self.cur.fetchall()  # 显示所有结果
-        except:
-            #print("执行查询语句失败 %s" % sql)
+        except Exception as e:
+            print(e)
             return 1
 
         return result
