@@ -3,20 +3,23 @@ import requests
 import json
 import re
 import time
+import os
 
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 
 from Utils import mysql_operator
 from Utils import config_operator
+from Utils import get_url
 
 
 class CelebrityInfoCrawler:
     def __init__(self):
         self.base_url = 'https://maoyan.com/films/celebrity/-'
+        self.poster_path = os.path.dirname(os.path.abspath('..')) + '\\Resources\\MaoyanCelebrityPosters\\'
         self.operator = mysql_operator.MysqlOperator()
 
-    def get_response(self, celebrity_id):
+    def get_poster(self, img_url):
         # 伪装请求
         ua = UserAgent()
         headers = {
@@ -24,14 +27,13 @@ class CelebrityInfoCrawler:
             'Accept-Encoding': 'gzip, deflate, br',
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
             'Connection': 'keep-alive',
-            'Cookie': '__mta=217831081.1608186388084.1611832389971.1611832764462.110; _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8; recentCis=1%3D151%3D140%3D84%3D197; theme=moviepro; _bsin_180503_=[1,10,11,12,13,14,15,16,17,2,3,4,5,6,7,8,9]; _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555; __mta=217831081.1608186388084.1611817639496.1611819045156.107; __mta=217831081.1608186388084.1611819045156.1611828685079.108; _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic; Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1611896259; _lxsdk_s=1774e69f736-905-b9a-b49%7C1097461883%7C1',
+            'Cookie': '__mta=217831081.1608186388084.1612173953177.1612179028696.95; __mta=217831081.1608186388084.1612161661732.1612161665243.132; _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8; uuid_n_v=v1; recentCis=1%3D151%3D140%3D84%3D197; theme=moviepro; uuid=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; _csrf=39b55a714339fd6eb8dd2bdf8b9601b85995049444885b7d2fca31e09257b05d; lt=t8I8mcKnX404DBn7MDrMn9T2PywAAAAAhgwAAIJf-Hmi1-ckw9XwgXMbD0YhmxgCBjMekOUcsBEaEcjR2Nt1V9nIMxa9JpQFElsHGA; lt.sig=t6O-xJMugn98A3qEGGWp7tdK3js; uid=1097461883; uid.sig=Qzn0f6oHqGvrFPGYvWuz1uoqSK0; _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555; __mta=217831081.1608186388084.1612151957305.1612152251917.133; _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic; Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1612179028; _lxsdk_s=1776ad71f1a-e10-3d9-280%7C1097461883%7C1',
             'User-Agent': ua.random
         }
-        cur_url = self.base_url.replace('-',  celebrity_id.__str__())
-        response = requests.get(url=cur_url, headers=headers)
+        response = requests.get(url=img_url, headers=headers)
         if response.status_code is not 200:
             return 1
-        return response.text
+        return response
 
     def read_celebrity_id(self):
         self.operator.conn_mysql()
@@ -41,31 +43,30 @@ class CelebrityInfoCrawler:
             print('从数据库读取影片Id出错')
         return result
 
-    def get_celebrity_info(self, bs):
-        name_object = bs.find(class_='china-name cele-name')
-        name = ''
-        if name_object is not None:
-            name = name_object.text
-
-        ename_object = bs.find(class_='eng-name cele-name')
-        ename = ''
-        if name_object is not None:
-            ename = ename_object.text
-
-        cele_desc = bs.find(class_='cele-desc')
-        introduce = ''
-        if cele_desc is not None:
-            introduce = cele_desc.text
-
-        dl_left = bs.find(class_='dl-left')
-        dl_right = bs.find(class_='dl-right')
-
+    def get_celebrity_info(self, bs, celebrity_id):
         dict_info = {}
         dict_info['birthday'] = ''
         dict_info['born'] = ''
         dict_info['sex'] = ''
         dict_info['jobs'] = ''
         dict_info['nationality'] = ''
+        dict_info['ename'] = ''
+        dict_info['introduce'] = ''
+
+        name_object = bs.find(class_='china-name cele-name')
+        if name_object is not None:
+            dict_info['name'] = name_object.text.replace('\"', '')
+
+        ename_object = bs.find(class_='eng-name cele-name')
+        if ename_object is not None:
+            dict_info['ename'] = ename_object.text.replace('\"', '')
+
+        cele_desc = bs.find(class_='cele-desc')
+        if cele_desc is not None:
+            dict_info['introduce'] = cele_desc.text.replace('\"', '\\\"')
+
+        dl_left = bs.find(class_='dl-left')
+        dl_right = bs.find(class_='dl-right')
 
         if dl_left is not None:
             title_list = dl_left.find_all(class_='basicInfo-item name')
@@ -105,9 +106,13 @@ class CelebrityInfoCrawler:
                     if title == '国籍':
                         dict_info['nationality'] = value
 
-        dict_info['name'] = name
-        dict_info['ename'] = ename
-        dict_info['introduce'] = introduce
+        poster = bs.find(class_='avatar')
+        if poster is not None:
+            img_url = poster.get('src')
+            if img_url is not None or img_url != '':
+                poster_response = self.get_poster(img_url)
+                if poster_response is not None:
+                    open(self.poster_path + '%d' % celebrity_id, 'wb').write(poster_response.content)
 
         return dict_info
 
@@ -154,6 +159,7 @@ class CelebrityInfoCrawler:
                     award = ''
                     if detail_left is not None:
                         award = detail_left.text
+                        award = award.replace('\"', '').strip()
 
                     detail_right = li.find(class_='detail-right')
                     if detail_right is not None and detail_left.text != '':
@@ -233,11 +239,13 @@ class CelebrityInfoCrawler:
                 base_info = '已更新'
             else:
                 base_info = '更新失败'
+
         else:
             sql = 'insert into maoyan_celebrity_baseinfo (celebrityId, name, ename, sex, jobs, born, birthday, introduce, nationality) ' \
                   'values(%d, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s")' % \
-                  (celebrity_id, dict_info['name'], dict_info['ename'], dict_info['sex'], dict_info['jobs'], dict_info['born'],
-                    dict_info['birthday'], dict_info['introduce'], dict_info['nationality'])
+                  (celebrity_id, dict_info['name'], dict_info['ename'], dict_info['sex'], dict_info['jobs'],
+                   dict_info['born'],
+                   dict_info['birthday'], dict_info['introduce'], dict_info['nationality'])
             if self.operator.execute_sql(sql) == 0:
                 base_info = '成功'
             else:
@@ -274,7 +282,8 @@ class CelebrityInfoCrawler:
             sql = 'select * from maoyan_celebrity_coactors where celebrityId=%d and coActorId=%d' % \
                   (celebrity_id, dict['coactor_id'])
             if self.operator.search(sql).__len__() > 0:
-                sql = 'update maoyan_celebrity_coactors set relation = "%s"' % dict['coactor_relation']
+                sql = 'update maoyan_celebrity_coactors set relation = "%s" where celebrityId=%d and coActorId=%d' % \
+                      (dict['coactor_relation'], celebrity_id, dict['coactor_id'])
                 if self.operator.execute_sql(sql) == 0:
                     relative_update += 1
                 else:
@@ -292,19 +301,39 @@ class CelebrityInfoCrawler:
 
 def official_method():
     crawler = CelebrityInfoCrawler()
+    getor = get_url.GetUrl()
     celebrity_id_list = crawler.read_celebrity_id()
     cfo = config_operator.ConfigOperator()
     offset = int(cfo.get_maoyan_film('actor_offset'))
     interval = int(cfo.get_maoyan_film('actor_interval'))
     for num in range(offset, celebrity_id_list.__len__()):
         celebrity_id = int(celebrity_id_list[num][0])
-        html_doc = crawler.get_response(celebrity_id)
-        bs = BeautifulSoup(html_doc, 'html.parser')
-        dict_info = crawler.get_celebrity_info(bs)
-        dict_awards = crawler.get_awards(bs)
-        list_coactors = crawler.get_coactors(bs)
-        crawler.write_db(dict_info, dict_awards, list_coactors, celebrity_id)
-        cfo.write_maoyan_film('actor_offset', num.__str__())
+        url = crawler.base_url.replace('-', celebrity_id.__str__())
+        try:
+            response = getor.get_response(url)
+            bs = BeautifulSoup(response.text, 'html.parser')
+            dict_info = crawler.get_celebrity_info(bs, celebrity_id)
+            dict_awards = crawler.get_awards(bs)
+            list_coactors = crawler.get_coactors(bs)
+            crawler.write_db(dict_info, dict_awards, list_coactors, celebrity_id)
+            cfo.write_maoyan_film('actor_offset', num.__str__())
+        except Exception as e:
+            while 1:
+                try:
+                    print('出现错误，30s后重试\n' + str(e))
+                    time.sleep(30)
+                    getor.change_account()
+                    response = getor.get_response(url)
+                    bs = BeautifulSoup(response.text, 'html.parser')
+                    dict_info = crawler.get_celebrity_info(bs, celebrity_id)
+                    dict_awards = crawler.get_awards(bs)
+                    list_coactors = crawler.get_coactors(bs)
+                    crawler.write_db(dict_info, dict_awards, list_coactors, celebrity_id)
+                    cfo.write_maoyan_film('actor_offset', num.__str__())
+                    break
+                except Exception as e:
+                    continue
+
         time.sleep(interval)
 
 
@@ -312,7 +341,7 @@ def single_method(celebrity_id):
     crawler = CelebrityInfoCrawler()
     html_doc = crawler.get_response(celebrity_id)
     bs = BeautifulSoup(html_doc, 'html.parser')
-    dict_info = crawler.get_celebrity_info(bs)
+    dict_info = crawler.get_celebrity_info(bs, celebrity_id)
     dict_awards = crawler.get_awards(bs)
     list_coactors = crawler.get_coactors(bs)
     crawler.write_db(dict_info, dict_awards, list_coactors, celebrity_id)

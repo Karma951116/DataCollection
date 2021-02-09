@@ -40,8 +40,9 @@ class MysqlOperator:
         try:
             self.cur.execute(sql)  # 执行sql
             self.conn.commit()  # 增删改操作完数据库后，需要执行提交操作
-        except:
+        except Exception as e:
             # 发生错误时回滚
+            print(e)
             self.conn.rollback()
             #print("执行语句失败 %s" % sql)
             return 1

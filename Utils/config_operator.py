@@ -23,7 +23,9 @@ class ConfigOperator:
 
     def write_maoyan_film(self, param, content):
         self.cf.set("Maoyan-Film", param, content)
-        self.cf.write(open(self.config_path, "w"))
+        with open(self.config_path, "w") as f:
+            self.cf.write(f)
+            f.close()
 
     def get_douban_film(self, param):
         value = self.cf.get("Douban-Film", param)
@@ -31,4 +33,16 @@ class ConfigOperator:
 
     def write_douban_film(self, param, content):
         self.cf.set("Douban-Film", param, content)
-        self.cf.write(open(self.config_path, "w"))
+        with open(self.config_path, "w") as f:
+            self.cf.write(f)
+            f.close()
+
+    def get_baidu_celebrity(self, param):
+        value = self.cf.get("Baidu-Celebrity", param)
+        return value
+
+    def write_baidu_celebrity(self, param, content):
+        self.cf.set("Baidu-Celebrity", param, content)
+        with open(self.config_path, "w") as f:
+            self.cf.write(f)
+            f.close()

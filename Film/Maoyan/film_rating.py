@@ -9,6 +9,7 @@ from fake_useragent import UserAgent
 
 from Utils import mysql_operator
 from Utils import config_operator
+from Utils import get_url
 
 
 class FilmRatingCrawler:
@@ -17,46 +18,9 @@ class FilmRatingCrawler:
         self.wanted_url = 'http://piaofang.maoyan.com/movie/-/wantindex'
         self.operator = mysql_operator.MysqlOperator()
 
-    def get_rating_response(self, film_id):
-        # 伪装请求
-        ua = UserAgent()
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
-            'Connection': 'keep-alive',
-            'Referer': 'https://piaofang.maoyan.com/movie/%s/promotion/trailers' % film_id,
-            'Cookie': '__mta=217831081.1608186388084.1611832389971.1611832764462.110; _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8; recentCis=1%3D151%3D140%3D84%3D197; theme=moviepro; _bsin_180503_=[1,10,11,12,13,14,15,16,17,2,3,4,5,6,7,8,9]; _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555; __mta=217831081.1608186388084.1611817639496.1611819045156.107; __mta=217831081.1608186388084.1611819045156.1611828685079.108; _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic; Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1611896259; _lxsdk_s=1774e69f736-905-b9a-b49%7C1097461883%7C1',
-            'User-Agent': ua.random
-        }
-        cur_url = self.rating_url.replace('-',  film_id.__str__())
-        response = requests.get(url=cur_url, headers=headers)
-        if response.status_code is not 200:
-            return 1
-        return response.text
-
-    def get_wanted_response(self, film_id):
-        # 伪装请求
-        ua = UserAgent()
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;'
-                      'q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
-            'Connection': 'keep-alive',
-            'Cookie': '__mta=217831081.1608186388084.1611928647805.1612143427051.113; _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8; recentCis=1%3D151%3D140%3D84%3D197; theme=moviepro; _bsin_180503_=[1,10,11,12,13,14,15,16,17,2,3,4,5,6,7,8,9]; _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555; __mta=217831081.1608186388084.1611817639496.1611819045156.107; __mta=217831081.1608186388084.1611819045156.1611828685079.108; Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1612057932; _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic; _lxsdk_s=1775b923ad9-cd4-a27-445%7C%7C1',
-            'User-Agent': ua.random,
-            'Referer': 'https://piaofang.maoyan.com/movie/%s/promotion/trailers' % film_id
-        }
-        cur_url = self.wanted_url.replace('-',  film_id.__str__())
-        response = requests.get(url=cur_url, headers=headers)
-        if response.status_code is not 200:
-            return 1
-        return response.text
-
     def read_film_id(self):
         self.operator.conn_mysql()
-        sql = 'select filmId from maoyan_film_baseinfo where (year = 2020 or year = 2019) and showCountry = "中国大陆"'
+        sql = 'select filmId from maoyan_film_baseinfo where (year = 2020 or year = 2019) and (FIND_IN_SET("中国大陆", productCountry) or FIND_IN_SET("中国台湾", productCountry) or FIND_IN_SET("中国香港", productCountry))'
         result = self.operator.search(sql)
         if result == 1:
             print('从数据库读取影片Id出错')
@@ -264,6 +228,7 @@ class FilmRatingCrawler:
 
 def official_method():
     crawler = FilmRatingCrawler()
+    getor = get_url.GetUrl()
     film_id_list = crawler.read_film_id()
     cfo = config_operator.ConfigOperator()
     offset = int(cfo.get_maoyan_film('rating_offset'))
@@ -271,16 +236,43 @@ def official_method():
     for num in range(offset, film_id_list.__len__()):
         film_id = int(film_id_list[num][0])
         # 获取评分信息
-        html_doc = crawler.get_rating_response(film_id)
-        dict_data = crawler.get_datadict_fromscript(html_doc)
-        dict_rating_info = crawler.get_ratings(html_doc)
-        # 获取想看数
-        html_doc_wanted = crawler.get_wanted_response(film_id)
-        #print(html_doc_wanted)
-        dict_data_wanted = crawler.get_datadict_fromscript(html_doc_wanted)
-        want_num = crawler.get_wanted(dict_data_wanted)
-        crawler.write_db(dict_rating_info, want_num, film_id)
-        cfo.write_maoyan_film('rating_offset', num.__str__())
+        try:
+            rating_url = crawler.rating_url.replace('-', film_id.__str__())
+            referer = 'https://piaofang.maoyan.com/movie/%s/promotion/trailers' % film_id
+            response = getor.get_response(rating_url, referer=referer)
+            # dict_data = crawler.get_datadict_fromscript(response.text)
+            dict_rating_info = crawler.get_ratings(response.text)
+            # 获取想看数
+            wanted_url = crawler.wanted_url.replace('-', film_id.__str__())
+            response_wanted = getor.get_response(wanted_url, referer=referer)
+            # print(html_doc_wanted)
+            dict_data_wanted = crawler.get_datadict_fromscript(response_wanted.text)
+            want_num = crawler.get_wanted(dict_data_wanted)
+            crawler.write_db(dict_rating_info, want_num, film_id)
+            cfo.write_maoyan_film('rating_offset', num.__str__())
+        except Exception as e:
+            while 1:
+                try:
+                    print('出现问题，30s后重试\n' + str(e))
+                    getor.change_account()
+                    time.sleep(30)
+                    rating_url = crawler.rating_url.replace('-', film_id.__str__())
+                    referer = 'https://piaofang.maoyan.com/movie/%s/promotion/trailers' % film_id
+                    response = getor.get_response(rating_url, referer=referer)
+                    # dict_data = crawler.get_datadict_fromscript(response.text)
+                    dict_rating_info = crawler.get_ratings(response.text)
+                    # 获取想看数
+                    wanted_url = crawler.wanted_url.replace('-', film_id.__str__())
+                    response_wanted = getor.get_response(wanted_url, referer=referer)
+                    # print(html_doc_wanted)
+                    dict_data_wanted = crawler.get_datadict_fromscript(response_wanted.text)
+                    want_num = crawler.get_wanted(dict_data_wanted)
+                    crawler.write_db(dict_rating_info, want_num, film_id)
+                    cfo.write_maoyan_film('rating_offset', num.__str__())
+                    break
+                except Exception as e:
+                    continue
+
         time.sleep(interval)
 
 

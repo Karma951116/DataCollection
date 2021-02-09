@@ -10,6 +10,7 @@ import time
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 
+from Utils import get_url
 from Utils import mysql_operator
 from Utils import config_operator
 
@@ -19,36 +20,6 @@ class FilmBaseInfoCrawler:
         self.base_url = 'https://maoyan.com/films/'
         self.poster_path = os.path.dirname(os.path.abspath('..')) + '\\Resources\\MaoyanFilmPosters\\'
         self.operator = mysql_operator.MysqlOperator()
-
-    def get_response(self, film_id):
-        # 伪装请求
-        ua = UserAgent()
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;'
-                      'q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
-            'Connection': 'keep-alive',
-            'Cookie': '__mta=217831081.1608186388084.1611725576857.1611790471095.103;'
-                      ' _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8;'
-                      ' uuid_n_v=v1; recentCis=1%3D151%3D140%3D84%3D197;'
-                      ' theme=moviepro; uuid=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993;'
-                      ' _csrf=39b55a714339fd6eb8dd2bdf8b9601b85995049444885b7d2fca31e09257b05d;'
-                      ' lt=t8I8mcKnX404DBn7MDrMn9T2PywAAAAAhgwAAIJf-Hmi1-ckw9XwgXMbD0YhmxgCBjMekOUcsBEaEcjR2Nt1V9nIMxa9JpQFElsHGA;'
-                      ' lt.sig=t6O-xJMugn98A3qEGGWp7tdK3js; uid=1097461883; uid.sig=Qzn0f6oHqGvrFPGYvWuz1uoqSK0;'
-                      ' _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993;'
-                      ' Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555;'
-                      ' _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic;'
-                      ' __mta=217831081.1608186388084.1611725576857.1611790469325.103;'
-                      ' Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1611790471;'
-                      ' _lxsdk_s=17746329ff9-519-5ce-354%7C1097461883%7C8',
-            'User-Agent': ua.random
-        }
-        cur_url = self.base_url + film_id.__str__() + '#award'
-        response = requests.get(url=cur_url, headers=headers)
-        if response.status_code is not 200:
-            return 1
-        return response.text
 
     def get_base_info(self, html_doc, film_id):
         # 这里一定要指定解析器，可以使用默认的html，也可以使用lxml比较快。
@@ -296,20 +267,40 @@ class FilmBaseInfoCrawler:
                  (int(awards_num), int(awards_already), int(awards_succ), int(awards_failed))
         print('%s;%d;base_info%s;staff%s;awards%s' % (dict_base_info['film_name'], film_id, base_info, staff, awards))
 
+
 def official_method():
     crawler = FilmBaseInfoCrawler()
+    getor = get_url.GetUrl()
     film_id_list = crawler.read_film_id()
     cfo = config_operator.ConfigOperator()
     offset = int(cfo.get_maoyan_film('baseinfo_offset'))
     interval = int(cfo.get_maoyan_film('baseinfo_interval'))
     for num in range(offset, film_id_list.__len__()):
         film_id = int(film_id_list[num][0])
-        html_doc = crawler.get_response(film_id)
-        dict_base_info = crawler.get_base_info(html_doc, film_id)
-        dict_cast_staff = crawler.get_staff_info(html_doc)
-        dict_awards = crawler.get_award_info(html_doc)
-        crawler.write_db(dict_base_info, dict_cast_staff, dict_awards, film_id)
-        cfo.write_maoyan_film('baseinfo_offset', num.__str__())
+        url = crawler.base_url + film_id.__str__() + '#award'
+        try:
+            response = getor.get_response(url)
+            dict_base_info = crawler.get_base_info(response.text, film_id)
+            dict_cast_staff = crawler.get_staff_info(response.text)
+            dict_awards = crawler.get_award_info(response.text)
+            crawler.write_db(dict_base_info, dict_cast_staff, dict_awards, film_id)
+            cfo.write_maoyan_film('baseinfo_offset', num.__str__())
+        except Exception as e:
+            while 1:
+                try:
+                    print('出现错误，30s后重试\n' + str(e))
+                    getor.change_account()
+                    time.sleep(30)
+                    response = getor.get_response(url)
+                    dict_base_info = crawler.get_base_info(response.text, film_id)
+                    dict_cast_staff = crawler.get_staff_info(response.text)
+                    dict_awards = crawler.get_award_info(response.text)
+                    crawler.write_db(dict_base_info, dict_cast_staff, dict_awards, film_id)
+                    cfo.write_maoyan_film('baseinfo_offset', num.__str__())
+                    break
+                except:
+                    pass
+
         time.sleep(interval)
 
 

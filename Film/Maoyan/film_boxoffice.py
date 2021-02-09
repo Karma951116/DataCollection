@@ -7,6 +7,7 @@ from fake_useragent import UserAgent
 
 from Utils import mysql_operator
 from Utils import config_operator
+from Utils import get_url
 
 
 class FilmBoxOfficeCrawler:
@@ -14,28 +15,10 @@ class FilmBoxOfficeCrawler:
         self.base_url = 'http://piaofang.maoyan.com/movie/-/boxshow'
         self.operator = mysql_operator.MysqlOperator()
 
-    def get_response(self, film_id):
-        # 伪装请求
-        ua = UserAgent()
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;'
-                      'q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6',
-            'Connection': 'keep-alive',
-            'Cookie': '__mta=217831081.1608186388084.1612010691493.1612105501280.109; _lxsdk_cuid=1766f5f7d67c8-0624e350695b8c-c791039-1fa400-1766f5f7d67c8; recentCis=1%3D151%3D140%3D84%3D197; theme=moviepro; _bsin_180503_=[1,10,11,12,13,14,15,16,17,2,3,4,5,6,7,8,9]; _lxsdk=7B68F3905C8A11EBB5F151AF051690DE1D7402F0C99D456A8D6E3BB78EA2E993; Hm_lvt_703e94591e87be68cc8da0da7cbd0be2=1611282588,1611303543,1611303548,1611303555; __mta=217831081.1608186388084.1611817639496.1611819045156.107; __mta=217831081.1608186388084.1611819045156.1611828685079.108; Hm_lpvt_703e94591e87be68cc8da0da7cbd0be2=1612057932; _lx_utm=utm_source%3DBaidu%26utm_medium%3Dorganic; _lxsdk_s=17758f9a7c2-76d-252-68c%7C1097461883%7C5',
-            'User-Agent': ua.random,
-            #'Referer': 'http://piaofang.maoyan.com/movie/%s/premierebox?barTheme=dark' % film_id
-        }
-        cur_url = self.base_url.replace('-',  film_id.__str__())
-        response = requests.get(url=cur_url, headers=headers)
-        if response.status_code is not 200:
-            return 1
-        return response.text
-
     def read_film_id(self):
         self.operator.conn_mysql()
-        sql = 'select filmId from maoyan_film_baseinfo where (year = 2020 or year = 2019) and showCountry = "中国大陆"'
+        sql = 'select filmId from maoyan_film_baseinfo where (year = 2020 or year = 2019) and (FIND_IN_SET("中国大陆",' \
+              ' productCountry) or FIND_IN_SET("中国台湾", productCountry) or FIND_IN_SET("中国香港", productCountry))'
         result = self.operator.search(sql)
         if result == 1:
             print('从数据库读取影片Id出错')
@@ -50,6 +33,10 @@ class FilmBoxOfficeCrawler:
         if summary_list is None:
             return
         dict_summary_info = {}
+        dict_summary_info['累计综合票房'] = ''
+        dict_summary_info['累计分账票房'] = ''
+        dict_summary_info['首日综合票房'] = ''
+        dict_summary_info['首周综合票房'] = ''
         for item in summary_list:
             title = item['title']
             valueDesc = item['valueDesc']
@@ -183,25 +170,49 @@ class FilmBoxOfficeCrawler:
 
 def official_method():
     crawler = FilmBoxOfficeCrawler()
+    getor = get_url.GetUrl()
     film_id_list = crawler.read_film_id()
     #print(film_id_list)
     cfo = config_operator.ConfigOperator()
     offset = int(cfo.get_maoyan_film('boxoffice_offset'))
     interval = int(cfo.get_maoyan_film('boxoffice_interval'))
     for num in range(offset, film_id_list.__len__()):
-        film_id = int(film_id_list[num][0])
-        html_doc = crawler.get_response(film_id)
-        #print(html_doc)
-        dict_data = crawler.get_datadict_fromscript(html_doc)
-        if crawler.check_data(dict_data):
-            print(str(film_id) + '无数据')
+        try:
+            film_id = int(film_id_list[num][0])
+            url = crawler.base_url.replace('-', film_id.__str__())
+            response = getor.get_response(url)
+            # print(html_doc)
+            dict_data = crawler.get_datadict_fromscript(response.text)
+            if crawler.check_data(dict_data):
+                print(str(film_id) + '无数据')
+                cfo.write_maoyan_film('boxoffice_offset', num.__str__())
+                time.sleep(interval)
+                continue
+            dict_summary_info = crawler.get_summary_boxoffice(dict_data)
+            dict_day_boxoffice = crawler.get_day_boxoffice(dict_data)
+            crawler.write_db(dict_summary_info, dict_day_boxoffice, film_id)
             cfo.write_maoyan_film('boxoffice_offset', num.__str__())
-            time.sleep(interval)
-            continue
-        dict_summary_info = crawler.get_summary_boxoffice(dict_data)
-        dict_day_boxoffice = crawler.get_day_boxoffice(dict_data)
-        crawler.write_db(dict_summary_info, dict_day_boxoffice, film_id)
-        cfo.write_maoyan_film('boxoffice_offset', num.__str__())
+        except Exception as e:
+            while 1:
+                try:
+                    print('出现错误，30s后重试\n' + str(e))
+                    getor.change_account()
+                    time.sleep(30)
+                    response = getor.get_response(url)
+                    # print(html_doc)
+                    dict_data = crawler.get_datadict_fromscript(response.text)
+                    if crawler.check_data(dict_data):
+                        print(str(film_id) + '无数据')
+                        cfo.write_maoyan_film('boxoffice_offset', num.__str__())
+                        time.sleep(interval)
+                        continue
+                    dict_summary_info = crawler.get_summary_boxoffice(dict_data)
+                    dict_day_boxoffice = crawler.get_day_boxoffice(dict_data)
+                    crawler.write_db(dict_summary_info, dict_day_boxoffice, film_id)
+                    cfo.write_maoyan_film('boxoffice_offset', num.__str__())
+                except:
+                    pass
+
         time.sleep(interval)
 
 
